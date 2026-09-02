@@ -1,5 +1,6 @@
-- **The interface speaks Chinese and Arabic.** Set it in Settings.
-- **Updates install themselves.** Download, restart, done.
-- **Fonts ship inside the app.** No Google Fonts fetch on launch.
-- **Hardened how engine commands launch.**
-- **Settings has one Save button.** Connections get their own tab.
+- **Chinese terminal text is legible everywhere.** The mono font stack gains Sarasa Mono SC.
+- **Context usage stops crying wolf on 200k models.** One 1M baseline instead of guessing.
+- **Kimi can now be the god engine.**
+- **Providers without a hive inbox say so out loud.**
+- **Agent status labels are translated.**
+- **The provider list is consolidated.** Grok, Gemini, Antigravity, Cursor, Copilot and PI removed.

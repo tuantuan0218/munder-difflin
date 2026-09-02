@@ -1,14 +1,116 @@
-<!-- RELEASE RUNNER, REQUIRED BEFORE YOU TAG: run RELEASE-CHECKLIST.md. Rehearse the updater on 0.4.6-rc.1 -> 0.4.7-rc.1 prereleases and pass the fault-injection checks BEFORE tagging the real release. This comment is not rendered in the published notes. -->
-# Munder Difflin v0.4.6
+<!-- RELEASE RUNNER, REQUIRED BEFORE YOU TAG: run RELEASE-CHECKLIST.md. Rehearse the updater on 0.4.7-rc.1 -> 0.4.8-rc.1 prereleases and pass the fault-injection checks BEFORE tagging the real release. This comment is not rendered in the published notes. -->
+# Munder Difflin v0.4.8
 
-**A local hive of Claude Code, Antigravity, Codex, Gemini, Cursor, Grok & Copilot agents that run themselves.**
+**A local hive of Claude Code, Codex, Kimi Code, Qwen — or any custom CLI — agents that run themselves.**
 Messaging, routing, and remembering, coordinated by your clone, Michael, who you talk to. Local-first and open source.
 
 ### → [**munderdiffl.in**](https://munderdiffl.in/) · see it in action, then grab a build below
 
 ---
 
-## What's new in 0.4.6
+## What's new in 0.4.8
+
+**The release that makes the terminal read Chinese and stops guessing at context windows.** The
+monospace font stack gains Sarasa Mono SC so CJK output renders legibly, the context-usage sniffer
+stops flagging 200k-window models as nearly full, Kimi can take the god role, and the provider list
+is consolidated.
+
+- **Chinese terminal text is legible everywhere.** The monospace stack in the design tokens and
+  terminal views now falls back to Sarasa Mono SC, so Chinese and mixed CJK/Latin output reads
+  cleanly on every platform.
+- **Context usage stops crying wolf on 200k models.** The parser used to treat any context above
+  100k as nearly full; it now only reacts above 1M tokens, and the floor's hint uses one 1M
+  baseline instead of guessing the window from the model name.
+- **Kimi can now be the god engine.** The god-role provider picker no longer limits itself to
+  engines with an inbox channel, so a Kimi agent can run the floor.
+- **Providers without a hive inbox say so out loud.** The terminal hint for such a provider now
+  tells you the message is also queued in the hive inbox and to move handled messages to
+  `inbox/.done/`.
+- **Agent status labels are translated.** PTY-parsed statuses (waiting for you, waiting on god,
+  thinking, resumed) now render in the floor's language instead of English.
+- **The provider list is consolidated.** Grok, Gemini, Antigravity, OpenCode, Crush, PI,
+  Copilot and Cursor are removed from the provider presets, their hook wiring drops with them
+  (the hook bridge is now Codex-only), and a hire manifest can only request `claude`, `codex`,
+  `kimi` or `qwen`.
+
+## Still new in 0.4.7
+
+**The release that finishes localizing the app.** The native menus, dialogs and toasts now follow
+the OS language, the rest of the window routes through the translation system so the language you
+pick in Settings reaches it, the Arabic locale grows by about 180 strings, agent names on the floor
+stay in sync with the hive registry, and the SSRF filter now also blocks IPv6 unique-local
+addresses.
+
+- **Native menus and dialogs follow the OS language.** The File and Edit menus, New Floor, the file
+  dialogs, the closing-time confirmation, the breaker toast and the need-a-restart toast now follow
+  the OS language: Chinese on a Chinese system, English everywhere else. They were hard-coded to
+  English before.
+- **More of the window routes through the language you pick in Settings.** The app shell's
+  new-floor, empty-floor and wake-up sequences, the hive picker, the closing-time and quit
+  confirmations, the edit-agent dialog and the agent name editor, the code editor's empty state,
+  recent files, the release drop, the completion toast, the PTY terminal view, the sidebar splitter
+  and the update toast and badge — plus fuller coverage of Settings, agent detail, onboarding, the
+  file tree, the full-screen terminal, the workers tab, the queue composer, the IDE panel and the
+  image preview.
+- **The Arabic locale grows by about 180 strings.**
+- **Floor rosters keep agent names in sync with the hive registry.** Every time a roster is
+  written — including at boot — names are corrected against the registry, so renaming an agent no
+  longer leaves an old name on the floor.
+- **The SSRF filter also blocks IPv6 unique-local addresses.** Fetch targets that point at internal
+  hosts are already blocked; the filter now also covers `fc00::/7`.
+
+### A note on Pro
+
+v0.5.0 launches with a Pro version alongside the community version. Community stays free, stays
+open, and keeps getting updates. Pro ships with new features and integrations, with more posted
+throughout the year, and it stays ahead of Community, for power users who want the full potential
+of coding agents and agent harnesses. The Pro roadmap also includes a mobile app. The first 100 people on the
+Founders' Wall get a month of Pro free, then 50% off the annual plan.
+
+### Thanks
+
+No community pull requests landed in this release — 0.4.7 is localization, roster sync and security
+work done in-house. The table further down still carries the v0.4.5 and v0.4.6 contributors, and
+the pull requests keep coming; the next release's thanks list starts here.
+
+<!-- drop -->
+<div class="drop">
+  <p class="eyebrow">Munder Difflin 0.4.8</p>
+  <h1>Chinese in your terminal, honest context bars.</h1>
+  <p class="lede">The monospace stack gains Sarasa Mono SC so CJK output renders legibly, the
+  context-usage sniffer stops flagging 200k-window models as nearly full, Kimi can run the floor
+  as god, and the provider list is consolidated.</p>
+  <ul class="features">
+    <li>
+      <h2>Chinese terminal text is legible</h2>
+      <p>The mono font stack in the design tokens and terminal views now falls back to Sarasa Mono
+      SC, so Chinese and mixed CJK/Latin output reads cleanly on every platform.</p>
+    </li>
+    <li>
+      <h2>Context usage stops crying wolf</h2>
+      <p>The parser only reacts above 1M tokens instead of warning at 100k, and the floor's hint
+      uses one 1M baseline rather than guessing the window from the model name.</p>
+    </li>
+    <li>
+      <h2>Kimi can be the god engine</h2>
+      <p>The god-role provider picker no longer requires an inbox channel, so a Kimi agent can
+      run the floor.</p>
+    </li>
+    <li>
+      <h2>Inbox reachable from the terminal</h2>
+      <p>A provider that cannot receive the hive inbox now tells you the message is also queued in
+      the inbox, and to move handled messages to `inbox/.done/`.</p>
+    </li>
+    <li>
+      <h2>Statuses in your language</h2>
+      <p>PTY-parsed agent statuses — waiting, thinking, resumed — now render in the floor's
+      language instead of English, and the provider list is consolidated.</p>
+    </li>
+  </ul>
+</div>
+<!-- /drop -->
+
+## Still new in 0.4.6 — *Speaks your language, updates itself*
 
 **The release that speaks your language and updates itself.** The interface now runs in Chinese and
 Arabic, the auto-updater downloads and installs a new build end to end, fonts ship inside the app so
@@ -36,64 +138,6 @@ hardened. Plus the Settings rework, an IME fix for CJK typing, and 16 community 
   [`TELEMETRY.md`](TELEMETRY.md) lists it like every other event and the same opt-out applies.
 - **The ASK ME card renders markdown.** Questions with emphasis, bullets, `code`, tables and links
   now render instead of showing their raw asterisks.
-
-### A note on Pro
-
-v0.5.0 launches with a Pro version alongside the community version. Community stays free, stays
-open, and keeps getting updates. Pro ships with new features and integrations, with more posted
-throughout the year, and it stays ahead of Community, for power users who want the full potential
-of coding agents and agent harnesses. The Pro roadmap also includes a mobile app. The first 100 people on the
-Founders' Wall get a month of Pro free, then 50% off the annual plan.
-
-### Thanks
-
-16 community pull requests from 13 contributors landed in this release, one of them (#213)
-re-implemented rather than merged. Thank you to [@aaroncoville](https://github.com/aaroncoville), [@abo123v-glitch](https://github.com/abo123v-glitch),
-[@BUGHUNTER-SACHIN](https://github.com/BUGHUNTER-SACHIN), [@djbiz](https://github.com/djbiz),
-[@gpechieu](https://github.com/gpechieu), [@HsienW](https://github.com/HsienW),
-[@HundredBillion](https://github.com/HundredBillion), [@jhinzzz](https://github.com/jhinzzz),
-[@L422Y](https://github.com/L422Y), [@LavaDMan](https://github.com/LavaDMan),
-[@raifemre](https://github.com/raifemre), [@savvaskoualis](https://github.com/savvaskoualis) and
-[@Schopenhauer-loves-Hegel](https://github.com/Schopenhauer-loves-Hegel), and to everyone who
-reviewed a pull request or filed the bug that led to one.
-
-<!-- drop -->
-<div class="drop">
-  <p class="eyebrow">Munder Difflin 0.4.6</p>
-  <h1>Speaks your language. Updates itself.</h1>
-  <p class="lede">The interface now runs in Chinese and Arabic, the updater installs a new build end
-  to end, and the fonts ship inside the app so a blocked network never leaves you on a blank screen.</p>
-  <ul class="features">
-    <li>
-      <h2>Chinese and Arabic</h2>
-      <p>Pick a language in Settings. Every string is translated and the terminals read right to
-      left. Some screens still need their padding and icons mirrored, and that is the next piece of
-      work.</p>
-    </li>
-    <li>
-      <h2>Updates install themselves</h2>
-      <p>The badge moves from check to available to downloading to downloaded on its own, and the
-      button at the end restarts you into the new version. This is the release that proves that path.</p>
-    </li>
-    <li>
-      <h2>Fonts ship inside the app</h2>
-      <p>No Google Fonts fetch on launch, so the app opens at the same speed on any network,
-      including one where Google is blocked, and this page can no longer white-screen while a
-      stylesheet loads.</p>
-    </li>
-    <li>
-      <h2>Hardened command launching</h2>
-      <p>The name of the CLI an agent launches is validated before it is ever resolved against your
-      PATH.</p>
-    </li>
-    <li>
-      <h2>One Save button</h2>
-      <p>The Connections tab stops repeating itself. REST API, MCP, Slack and webhooks each keep
-      their place.</p>
-    </li>
-  </ul>
-</div>
-<!-- /drop -->
 
 ## Still new in 0.4.5
 
@@ -297,22 +341,22 @@ Apple Silicon and Intel.
 ### 🍎 macOS
 | Build | File |
 |---|---|
-| Universal (Apple Silicon + Intel) | [`Munder-Difflin-0.4.6-mac-universal.dmg`](https://github.com/chaitanyagiri/munder-difflin/releases/latest/download/Munder-Difflin-0.4.6-mac-universal.dmg) |
+| Universal (Apple Silicon + Intel) | [`Munder-Difflin-0.4.8-mac-universal.dmg`](https://github.com/chaitanyagiri/munder-difflin/releases/latest/download/Munder-Difflin-0.4.8-mac-universal.dmg) |
 
 ### 🪟 Windows
 | Build | File |
 |---|---|
-| Installer (x64), *recommended* | [`Munder-Difflin-0.4.6-win-x64-setup.exe`](https://github.com/chaitanyagiri/munder-difflin/releases/latest/download/Munder-Difflin-0.4.6-win-x64-setup.exe) |
-| Portable (x64, no install) | [`Munder-Difflin-0.4.6-win-x64-portable.exe`](https://github.com/chaitanyagiri/munder-difflin/releases/latest/download/Munder-Difflin-0.4.6-win-x64-portable.exe) |
+| Installer (x64), *recommended* | [`Munder-Difflin-0.4.8-win-x64-setup.exe`](https://github.com/chaitanyagiri/munder-difflin/releases/latest/download/Munder-Difflin-0.4.8-win-x64-setup.exe) |
+| Portable (x64, no install) | [`Munder-Difflin-0.4.8-win-x64-portable.exe`](https://github.com/chaitanyagiri/munder-difflin/releases/latest/download/Munder-Difflin-0.4.8-win-x64-portable.exe) |
 
 ### 🐧 Linux
 | Build | File |
 |---|---|
-| AppImage (x86_64) | [`Munder-Difflin-0.4.6-linux-x86_64.AppImage`](https://github.com/chaitanyagiri/munder-difflin/releases/latest/download/Munder-Difflin-0.4.6-linux-x86_64.AppImage) |
+| AppImage (x86_64) | [`Munder-Difflin-0.4.8-linux-x86_64.AppImage`](https://github.com/chaitanyagiri/munder-difflin/releases/latest/download/Munder-Difflin-0.4.8-linux-x86_64.AppImage) |
 
 ### 📦 Source
-[Source code (zip)](https://github.com/chaitanyagiri/munder-difflin/archive/refs/tags/v0.4.6.zip) ·
-[Source code (tar.gz)](https://github.com/chaitanyagiri/munder-difflin/archive/refs/tags/v0.4.6.tar.gz)
+[Source code (zip)](https://github.com/chaitanyagiri/munder-difflin/archive/refs/tags/v0.4.8.zip) ·
+[Source code (tar.gz)](https://github.com/chaitanyagiri/munder-difflin/archive/refs/tags/v0.4.8.tar.gz)
 
 > **Verify your download:** [`SHA256SUMS.txt`](https://github.com/chaitanyagiri/munder-difflin/releases/latest/download/SHA256SUMS.txt) — then `shasum -a 256 -c SHA256SUMS.txt` (macOS/Linux) or `Get-FileHash` (Windows).
 
@@ -339,7 +383,7 @@ Apple Silicon and Intel.
 
 ## Requirements
 - macOS 12+, Windows 10/11, or a modern Linux desktop
-- [Claude Code](https://claude.com/claude-code) installed and on your `PATH` (and/or the Antigravity `agy` or OpenAI `codex` CLI for those providers)
+- [Claude Code](https://claude.com/claude-code) installed and on your `PATH` (and/or the OpenAI `codex`, Kimi `kimi`, or Qwen `qwen` CLI for those providers)
 - A Claude Code subscription (Munder Difflin drives your existing `claude` CLI — it doesn't replace it)
 - For **Realtime Michael** (voice): your own **OpenAI key with Realtime API access** — without it the **Talk** button stays disabled
 
@@ -358,7 +402,7 @@ To produce installers yourself: `npm run dist` (current OS), or `dist:mac` / `di
 ---
 
 ## What's inside
-- **The simulation** — every agent is a real `claude` (or `agy` / `codex` / local-provider) pseudo-terminal, visualized as an avatar on a watchable office floor (`node-pty` · `xterm.js` · Pixi.js).
+- **The simulation** — every agent is a real `claude` (or `codex` / `kimi` / `qwen` / custom-command) pseudo-terminal, visualized as an avatar on a watchable office floor (`node-pty` · `xterm.js` · Pixi.js).
 - **Talk to Michael** — a realtime **voice channel to the GOD orchestrator** that reads the hive and acts behind spoken echo-back confirmation, BYOK and main-only.
 - **Selectable engines + per-hire capabilities** — each hire (and Michael himself) runs on a pluggable engine, with its own consented skills + MCP catalog.
 - **MemPalace** — a markdown-first, semantic memory layer the whole office shares; cross-session recall in ~12ms.

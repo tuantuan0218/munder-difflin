@@ -4,7 +4,86 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.8] — 2026-09-02
+
+**The release that makes the terminal read CJK clearly and stops guessing at context windows.** The
+terminal's monospace font stack gains Sarasa Mono SC so Chinese renders legibly everywhere, the
+context-usage sniffer stops flagging 200k-window models as nearly full, Kimi can take the god role,
+and the provider list is consolidated.
+
+### Added
+
+- **Kimi can now be the god engine.** The god-role provider picker no longer limits itself to
+  engines with an inbox channel, so a Kimi agent can run the floor. (src/renderer/src/store/config.ts)
+
+### Fixed
+
+- **Context usage no longer cries wolf on 200k models.** The terminal parser used to treat any
+  context above 100k as nearly full; it now only reacts above 1M tokens, and the floor's hint no
+  longer guesses the window from the model name (1m vs 200k) but uses one 1M baseline.
+  (src/renderer/src/hooks/usePtyParser.ts, src/renderer/src/hooks/useHive.ts)
+
+### Changed
+
+- **Terminal fonts gain Sarasa Mono SC.** The monospace stack in the design tokens and terminal
+  views now falls back to Sarasa Mono SC, so Chinese and mixed CJK/Latin output reads cleanly on
+  every platform. (src/renderer/src/design/tokens.ts, TerminalView.tsx, terminalPool.ts)
+- **Providers without a hive inbox say so out loud.** The terminal hint for such a provider now
+  tells you the message is also queued in the hive inbox and to move handled messages to
+  inbox/.done/. (src/renderer/src/hooks/useHive.ts)
+- **Agent status labels are translated.** PTY-parsed status actions (waiting for you, waiting on
+  god, thinking, resumed) now render in the floor's language instead of English.
+  (src/renderer/src/hooks/usePtyParser.ts, useHive.ts)
+- **The provider list is consolidated.** Grok, Gemini, Antigravity, OpenCode, Crush, PI,
+  Copilot and Cursor are removed from the provider presets (`AGENT_PROVIDER_PRESETS`), their hook
+  wiring drops with them (`grokCommands.ts` is deleted, the hook bridge is now Codex-only), and a
+  hire manifest can only request `claude`, `codex`, `kimi` or `qwen`.
+  (src/shared/agentProvider.ts, src/shared/grokCommands.ts, src/shared/hire.ts, src/main/hive.ts,
+  OnboardingWizard.tsx)
+
+## [0.4.7] — 2026-09-01
+
+**The release that finishes localizing the app.** The native menus, dialogs and toasts now follow
+the OS language, the rest of the window routes through the translation system so the language you
+pick in Settings reaches it, the Arabic locale grows by about 180 strings, agent names on the floor
+stay in sync with the hive registry, and the SSRF filter now also blocks IPv6 unique-local addresses.
+
+### Added
+
+- **Native menus and dialogs follow the OS language.** The File and Edit menus, New Floor, the file
+  dialogs, the closing-time confirmation, the breaker toast and the need-a-restart toast now follow
+  the OS language: Chinese on a Chinese system, English everywhere else. They were hard-coded to
+  English before.
+- **More of the window routes through the language you pick in Settings.** The app shell's new-floor,
+  empty-floor and wake-up sequences, the hive picker, the closing-time and quit confirmations, the
+  edit-agent dialog and the agent name editor, the code editor's empty state, recent files, the
+  release drop, the completion toast, the PTY terminal view, the sidebar splitter and the update
+  toast and badge — plus fuller coverage of Settings, agent detail, onboarding, the file tree, the
+  full-screen terminal, the workers tab, the queue composer, the IDE panel and the image preview.
+- **The Arabic locale grows by about 180 strings.**
+- **Floor rosters keep agent names in sync with the hive registry.** Every time a roster is written —
+  including at boot — names are corrected against the registry, so renaming an agent no longer leaves
+  an old name on the floor.
+
+### Security
+
+- **The SSRF filter also blocks IPv6 unique-local addresses.** The filter that keeps internal hosts
+  out of fetch targets now also blocks `fc00::/7`.
+
+### Engine & install
+
+- **MemPalace semantic memory is on by default.** `semanticMemory` defaults to enabled, and the
+  shared palace mines each agent's `memory.md` with the `minilm` embedding model.
+  (`src/main/config.ts:407`)
+- **Codex auto mode keeps a working sandbox on Windows.** Auto mode launches with
+  `-a never -s danger-full-access`; the previous `workspace-write` sandbox rejected `--add-dir` on
+  codex 0.151 for Windows and killed workers within seconds. (`src/shared/agentProvider.ts:193-194`)
+- **The install order no longer double-rebuilds native modules.** The `postinstall` step no longer
+  forces `electron-rebuild`, so it no longer collides with the electron-builder rebuild.
+  (`package.json` `postinstall`)
+- **A configured machine opens straight onto the floor.** On first launch, when onboarding is
+  already complete and a harness home exists, the app opens the hive directly instead of making you
+  click through onboarding again. (`src/renderer/src/App.tsx`)
 
 ## [0.4.6] — 2026-08-27
 
@@ -867,7 +946,7 @@ sleep-frozen message router and Codex workers' filesystem permissions.
 - **Re-arm the hive message router on wake (god→worker delivery survives sleep).** The outbox→inbox router is a `setInterval` (`hive.routeOnce` every ~1.5s) that, like the always-on beats, freezes during true macOS system sleep. `onSystemResume()` already re-armed the mission scheduler, the fleet/breaker beats, and keep-awake on `powerMonitor` `resume`/`unlock-screen` — but it never re-armed the router. So after a long sleep (e.g. laptop closed overnight) the scheduler→god path recovered while **every agent's outbox silently stopped draining**: god→worker, worker↔worker, and broadcast mail piled up undelivered, and no `message` event was logged. The resume handler now re-arms the router (clear-then-set, idempotent) **and** immediately drains the accumulated backlog instead of waiting for the first post-wake tick; the renderer's idle inbox-wake nudge then wakes each parked recipient once its mail lands (`src/main/index.ts`). Verified by `scripts/verify-keepalive-catchup.mjs` (now also reproduces the pre-fix backlog stall and proves the re-arm + flush).
 - **Open-source model quick-picks + local-setup guides in Add-Agent.** Hiring a worker on a local-capable CLI engine (OpenCode/Crush/pi.dev) now shows curated **OSS-model quick-picks** — a **Local** bucket (Mac-runnable Ollama tags: gpt-oss 20B/120B, Qwen3 30B-A3B/Coder, DeepSeek-R1 32B, Mistral Small, GLM-4.7-Flash, Llama 3.3 70B) and a **third-party OSS provider** bucket (BYOK: gpt-oss/Llama via Groq, DeepSeek-V4-Flash, GLM-4.6, Kimi K2.6, Qwen3-Coder via OpenRouter). Picking one fills the engine-correct slug (OpenCode `local/<tag>`, Crush/pi `ollama/<tag>`; provider slugs identical across engines) and rebuilds the command. Slugs are transcribed from a verified catalog — bleeding-edge frontier models are intentionally left out of code defaults. The Add-Agent help line and **Settings → AI Engines** local-setup area now hyperlink two how-to guides (run on open models · set up on a Mac Mini) (`src/shared/ossModels.ts`, `AddAgentModal.tsx`, `AiEnginesSettings.tsx`).
 - **Crush no longer dies with `Unknown command` on spawn (the hive protocol now reaches it).** A Crush worker was launched as `crush --model <m> --yolo "You are …(the whole hive protocol)"` — the protocol passed as a positional arg. But bare `crush` is an interactive Bubble Tea TUI on a Cobra root command, which reads the first positional as a **subcommand**, so it aborted with `unknown command "You are…"`; the protocol never reached the model, the worker never learned it was a hive agent, and the PTY died. Crush has no `--prompt` flag and `crush run` is one-shot, so the protocol is now **typed into the TUI** instead: a new preset capability `seedDelivery:'type-into-tui'` makes the spawn drop the positional (`crush [--model m] [--yolo]`) and hand the protocol back as a `seedPrompt`, which the renderer types in as the worker's first turn after a boot-grace — through the **same per-pty write-chain as the inbox-wake nudge**, so the seed and a nudge can never jam onto one line. Covers fresh Crush spawns, restores, and Crush-as-Michael (`src/shared/agentProvider.ts`, `src/main/hive.ts`, `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/src/hooks/useHive.ts`, `AddAgentModal.tsx`, `AgentStrip.tsx`, `store.ts`).
-- **Auto restart-and-continue after a first-time engine-CLI install (no dead-end).** When an agent's engine binary (OpenCode/Crush/pi.dev/Codex/…) wasn't installed, the missing-CLI short-circuit ran the provider's installer in the PTY, then printed *"click restart & continue to launch the agent"* — but no such button exists for a not-yet-started agent, so the PTY just sat at `process exited (code 0)` and the agent dead-ended. Now, on a **clean install exit**, the PTY-exit handler auto restart-and-continues: it re-runs the *same* spawn into the *same* pty/window (carrying a `noAutoInstall` flag) so the freshly-installed CLI launches with no user click, and the renderer re-arms that terminal in place (clears the "process exited" line, re-enables input) via a new `pty:relaunch` signal. Provider-agnostic (every engine's installer path) and idempotent by construction — `noAutoInstall` guarantees the installer can never fire twice, and providers with no bundled installer (manual-hint-only) are never armed for relaunch. The install banner copy is now honest ("Installed — launching the agent…") (`src/main/index.ts`, `src/main/pty.ts`, `src/preload/index.ts`, `src/renderer/src/components/terminalPool.ts`).
+- **Auto restart-and-continue after a first-time engine-CLI install (no dead-end).** When an agent's engine binary (OpenCode/Crush/pi.dev/Codex/…) wasn't installed, the missing-CLI short-circuit ran the provider's installer in the PTY, then printed *"click restart & continue to launch the agent"* — but no such button exists for a not-yet-started agent, so the PTY just sat at `process exited (code 0)` and the agent dead-ended. Now, on a **clean install exit**, the PTY-exit handler auto restart-and-continues: it re-runs the *same* spawn into the *same* pty/window (carrying a `noAutoInstall` flag) so the freshly-installed CLI launches with no user click, and the renderer re-arms that terminal in place (clears the "process exited" line, re-enables input) via a new `pty:relaunch` signal. Provider-agnostic (every engine's installer path) and idempotent by construction — `noAutoInstall` guarantees the installer can never fire twice, and providers with no bundled installer (manual-hint-only) are never armed for relaunch. The install banner copy is now honest ("Installed — launching the agent…") (`src/main/index.ts`, `src/main/pty.ts`, `src/preload/index.ts`, `src/renderer/src/components/tterminalPool.ts`).
 
 ## [0.3.0] — 2026-06-21
 
