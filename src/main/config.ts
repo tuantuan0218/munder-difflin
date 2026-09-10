@@ -417,6 +417,14 @@ export interface HarnessConfig {
   /** Never condense a file smaller than this; also the section-trigger byte floor.
    *  DECIDED: 16 KB. */
   reflectMinBytes?: number;
+  /** Provider for the condense summariser call ('pi' | 'claude' | …). When unset
+   *  it follows godProvider, then the defaultCommand binary name. A pi fleet must
+   *  NOT route through the hidden-Claude-PTY path (reads ~/.claude/projects, which
+   *  pi never writes → permanent summarize-failed). */
+  reflectProvider?: string;
+  /** Model id for the condense summariser call. When unset a pi fleet uses
+   *  defaultModel and a claude fleet uses the cheap Haiku. */
+  reflectModel?: string;
 }
 
 const DEFAULTS: HarnessConfig = {

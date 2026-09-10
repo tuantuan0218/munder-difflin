@@ -26,13 +26,27 @@ import {
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { runHiddenClaude } from './hiddenClaude';
+import { runHiddenPi } from './hiddenPi';
 
 /** Total memory.md budget — mirrors the janitor's CONTEXT_BUDGET_BYTES (128 KB). */
 const BUDGET_BYTES = 131_072;
-/** Cheap tail-summarizer (DECIDED by god). The verify gate covers quality. */
+/** Cheap tail-summarizer (DECIDED by god) for CLAUDE fleets. The verify gate covers quality. */
 const CONDENSE_MODEL = 'claude-haiku-4-5';
 /** Hard cap so a wedged headless run can't stall the reflect loop. */
 const DEFAULT_TIMEOUT_MS = 180_000;
+/** Max chars of the (B) evict payload per summariser call. The prompt travels as
+ *  ONE argv element; on Windows CreateProcess refuses a command line over 32,767
+ *  UTF-16 units (Node surfaces it as `spawn ENAMETOOLONG`). Eviction tails have
+ *  measured 108 KB on this machine, so one call per memory is not enough — the
+ *  tail is rolled through the summariser in chunks, each chunk folded into the
+ *  running (A) summary. Budgeted well under the ceiling to leave room for the
+ *  system prefix + (A) + (C). */
+const SUMMARIZE_CHUNK_BUDGET = 9_000;
+/** Context caps for the repeated parts of the prompt so total stays bounded.
+ *  Worst-case prompt = CONDENSE_SYSTEM (~900) + RUNNING_CTX_CAP + CHUNK_BUDGET
+ *  + PINNED_CTX_CAP + labels (~200) ≈ 21 KB, inside hiddenPi's 28 KB budget. */
+const RUNNING_CTX_CAP = 8_000;
+const PINNED_CTX_CAP = 3_000;
 
 /** The fixed region headings of the bounded memory shape (the stable contract). */
 const PINNED_HEADING = '## 📌 Durable facts (pinned — never condensed)';
@@ -72,7 +86,7 @@ export interface ReflectSettings {
 }
 
 /** A `## ` section: its heading line and the body text beneath it. */
-interface Section { heading: string; body: string }
+export interface Section { heading: string; body: string }
 
 /** A parsed memory.md split into the three regions. `pinned`/`condensed` are null
  *  for legacy (un-structured) files — they're created on first condense. */
@@ -101,17 +115,27 @@ export class MemoryReflector {
 
   /**
    * @param getHome      Lazily resolve harnessHome so reflection follows config.
-   * @param getCommand   The base `claude` command (only its binary name is used).
+   * @param getCommand   The base CLI command (only its binary name is used).
    * @param getMemoryEnv Extra env (the shared MemPalace path) merged into the call.
    * @param getSettings  Reflect tunables (interval + thresholds), read each tick.
    * @param appendLog    Sink for `condense`/`condense-abort` events (hive log.jsonl).
+   * @param getProvider  Fleet provider ('pi' | 'claude' | …). DEFAULTS to 'claude'
+   *   so pre-existing five-arg constructions keep the historical path. A pi fleet
+   *   MUST pass 'pi': runHiddenClaude spawns claude-only flags and then reads
+   *   ~/.claude/projects — a place pi never writes — so every condense died as
+   *   `summarize-failed: no assistant response found in transcript` (512 aborts,
+   *   zero successes, on this machine).
+   * @param getReflectModel Model id for the summariser call (pi needs a real,
+   *   provider-visible model id; claude defaults to the cheap Haiku).
    */
   constructor(
     private getHome: () => string | null,
     private getCommand: () => string,
     private getMemoryEnv: () => Record<string, string>,
     private getSettings: () => ReflectSettings,
-    private appendLog: (event: Record<string, unknown>) => void
+    private appendLog: (event: Record<string, unknown>) => void,
+    private getProvider: () => string = () => 'claude',
+    private getReflectModel: () => string = () => CONDENSE_MODEL
   ) {}
 
   // — lifecycle (mirrors MemoryManager) —
@@ -258,26 +282,23 @@ export class MemoryReflector {
 
   // — the headless LLM call (the only non-deterministic step) —
 
-  private async summarize(
-    home: string, condensed: string | null, evict: Section[], pinned: string | null
-  ): Promise<{ condensed: string; hoist: string[] }> {
-    const evictText = evict.map((s) => `${s.heading}\n${s.body}`).join('\n\n').trim();
-    const prompt = [
-      CONDENSE_SYSTEM,
-      '',
-      '--- INPUT ---',
-      '(A) CURRENT CONDENSED SUMMARY:',
-      condensed?.trim() || '(none yet)',
-      '',
-      '(B) OLDER SECTIONS BEING EVICTED:',
-      evictText || '(none)',
-      '',
-      '(C) PINNED DURABLE FACTS (context only — do not rewrite):',
-      pinned?.trim() || '(none)'
-    ].join('\n');
-
+  /** Route one summariser prompt to the fleet's own CLI. pi answers on stdout
+   *  (`pi --print`) and never writes ~/.claude/projects, so it must NOT go
+   *  through the hidden-Claude-PTY + transcript path. */
+  private async askSummariser(home: string, prompt: string): Promise<string> {
+    const provider = (this.getProvider() || 'claude').trim().toLowerCase();
+    if (provider === 'pi') {
+      const r = await runHiddenPi(prompt, {
+        model: this.getReflectModel(),
+        cwd: home,
+        command: this.getCommand(),
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      if (!r.ok || !r.text) throw new Error(r.error ?? 'condense: pi returned no text');
+      return r.text;
+    }
     const result = await runHiddenClaude(prompt, {
-      model: CONDENSE_MODEL,
+      model: this.getReflectModel(),
       cwd: home,
       command: this.getCommand(),
       // Pure text transform — must never touch the repo or shell out.
@@ -285,14 +306,94 @@ export class MemoryReflector {
       env: this.getMemoryEnv(),
       timeoutMs: DEFAULT_TIMEOUT_MS,
     });
-
     if (!result.ok || !result.text) {
       throw new Error(result.error ?? 'condense: hidden session returned no text');
     }
-    const parsed = parseSummary(result.text);
-    if (!parsed) throw new Error('condense: response contained no parseable JSON');
-    return parsed;
+    return result.text;
   }
+
+  /** Summarise the evicted tail into the rolling condensed block.
+   *
+   *  Chunked by design: the whole tail (up to ~108 KB measured) cannot travel as
+   *  one argv element on Windows (32,767-unit CreateProcess ceiling), and the
+   *  recursive contract already tolerates re-summarising (A) with each new (B) —
+   *  so we fold the tail through the model in section-aligned chunks, each pass
+   *  REPLACING (A) rather than appending to it. Hoisted durable facts accumulate
+   *  across passes. */
+  private async summarize(
+    home: string, condensed: string | null, evict: Section[], pinned: string | null
+  ): Promise<{ condensed: string; hoist: string[] }> {
+    const pinnedCtx = (pinned?.trim() || '(none)').slice(0, PINNED_CTX_CAP);
+    const chunks = splitSectionsForBudget(evict, SUMMARIZE_CHUNK_BUDGET);
+    if (!chunks.length) chunks.push([]);   // one empty pass keeps the old contract
+
+    let running = condensed?.trim() || '(none yet)';
+    const hoist: string[] = [];
+    let lastParsed: { condensed: string; hoist: string[] } | null = null;
+
+    for (let i = 0; i < chunks.length; i++) {
+      const evictText = chunks[i].map((s) => `${s.heading}\n${s.body}`).join('\n\n').trim();
+      const prompt = [
+        CONDENSE_SYSTEM,
+        '',
+        '--- INPUT ---',
+        '(A) CURRENT CONDENSED SUMMARY:',
+        running.slice(0, RUNNING_CTX_CAP) || '(none yet)',
+        '',
+        `(B) OLDER SECTIONS BEING EVICTED${chunks.length > 1 ? ` (part ${i + 1} of ${chunks.length} — fold with (A), keep (A)'s durable content)` : ''}:`,
+        evictText || '(none)',
+        '',
+        '(C) PINNED DURABLE FACTS (context only — do not rewrite):',
+        pinnedCtx
+      ].join('\n');
+
+      const text = await this.askSummariser(home, prompt);
+      const parsed = parseSummary(text);
+      if (!parsed) throw new Error('condense: response contained no parseable JSON');
+      running = parsed.condensed.trim();
+      hoist.push(...parsed.hoist);
+      lastParsed = parsed;
+    }
+
+    if (!lastParsed) throw new Error('condense: no summariser pass ran');
+    return { condensed: running, hoist };
+  }
+}
+
+/** Pack sections (oldest→newest) into consecutive groups whose joined text stays
+ *  under `budget` chars each. A single oversized section is split by lines into
+ *  pseudo-sections (heading repeated with a part marker) so no chunk can ever
+ *  blow the Windows command-line ceiling — nothing is silently dropped.
+ *  Exported for tests. */
+export function splitSectionsForBudget(sections: Section[], budget: number): Section[][] {
+  const flat: Section[] = [];
+  for (const s of sections) {
+    if (s.heading.length + s.body.length + 2 <= budget) { flat.push(s); continue; }
+    const lines = s.body.split('\n');
+    let part: string[] = [];
+    let partNo = 1;
+    const flush = () => {
+      if (!part.length) return;
+      flat.push({ heading: `${s.heading} (part ${partNo})`, body: part.join('\n') });
+      part = []; partNo++;
+    };
+    for (const l of lines) {
+      if (part.join('\n').length + l.length + 1 > budget - s.heading.length - 20) flush();
+      part.push(l);
+    }
+    flush();
+  }
+  const chunks: Section[][] = [];
+  let cur: Section[] = [];
+  let size = 0;
+  for (const s of flat) {
+    const len = s.heading.length + s.body.length + 2;
+    if (cur.length && size + len > budget) { chunks.push(cur); cur = []; size = 0; }
+    cur.push(s);
+    size += len;
+  }
+  if (cur.length) chunks.push(cur);
+  return chunks;
 }
 
 // ─── pure helpers (the deterministic, unit-testable half) ────────────────────

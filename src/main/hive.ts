@@ -3091,11 +3091,21 @@ function register(pi) {
   if (!pi || typeof pi.on !== 'function') return false;
   try {
     pi.on('tool_call', function (ev) {
-      post({ hook_event_name: 'PreToolUse', tool_name: ev && (ev.name || (ev.tool && ev.tool.name)), tool_input: ev && (ev.args || ev.input) });
+      // pi extension API: event.toolName / event.input (docs/extensions.md #tool_call).
+      // Legacy fallbacks kept for older pi builds; a wrong field made every call
+      // key as "?:"+hash(undefined) in the breaker → 8 distinct calls read as an
+      // identical-call loop and constrained healthy agents (2026-09-10 mass kill).
+      const tn = ev && (ev.toolName || ev.name || (ev.tool && ev.tool.name));
+      const ti = ev && (ev.input || ev.args);
+      post({ hook_event_name: 'PreToolUse', tool_name: tn, tool_input: ti });
       if (AUTO) { try { if (ev && typeof ev.approve === 'function') ev.approve(); } catch (e) {} return { approve: true }; }
       return undefined;
     });
-    pi.on('tool_result', function (ev) { post({ hook_event_name: 'PostToolUse', tool_name: ev && (ev.name || (ev.tool && ev.tool.name)) }); });
+    pi.on('tool_result', function (ev) {
+      const tn = ev && (ev.toolName || ev.name || (ev.tool && ev.tool.name));
+      const ti = ev && (ev.input || ev.args);
+      post({ hook_event_name: 'PostToolUse', tool_name: tn, tool_input: ti });
+    });
     pi.on('agent_end', function () { post({ hook_event_name: 'Stop' }); });
     return true;
   } catch (e) { return false; }

@@ -325,13 +325,33 @@ function reflectSettings(): ReflectSettings {
   };
 }
 // Finishes the janitor's missing condense half: bounds each agent's memory.md
-// (Haiku tail-summary, backup→verify→atomic-swap) so it never grows unbounded.
+// (cheap-model tail-summary, backup→verify→atomic-swap) so it never grows unbounded.
+// Provider-aware: a pi fleet summarises through `pi --print` (stdout), NOT the
+// hidden-Claude-PTY + ~/.claude/projects path — that mismatch killed every
+// condense on this machine (512 aborts, zero successes).
+const reflectProvider = (): string => {
+  const c = readConfig();
+  return (c.reflectProvider as string | undefined)
+    ?? (c.godProvider as string | undefined)
+    ?? ((c.defaultCommand ?? 'claude').trim().split(/\s+/)[0] || 'claude');
+};
+const reflectModel = (): string => {
+  const c = readConfig();
+  const explicit = (c.reflectModel as string | undefined)?.trim();
+  if (explicit) return explicit;
+  // pi has no 'claude-haiku-4-5' in its catalog; use the fleet's own cheap model.
+  return reflectProvider() === 'pi'
+    ? ((c.defaultModel as string | undefined) ?? 'yunshu/deepseek-v4-flash')
+    : 'claude-haiku-4-5';
+};
 const reflector = new MemoryReflector(
   () => readConfig().harnessHome,
   () => readConfig().defaultCommand ?? 'claude',
   () => memory.env(),
   reflectSettings,
-  (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } }
+  (event) => { try { hive.appendLog(event); } catch { /* best-effort */ } },
+  reflectProvider,
+  reflectModel
 );
 // Durable harness state (SQLite, main process). Phase A: window bounds (kv) +
 // net-new command history. Opened in whenReady, closed in the teardown blocks.
