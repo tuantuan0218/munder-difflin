@@ -291,6 +291,13 @@ export function redactSecrets(text: unknown): string {
 // ─── HiveManager ────────────────────────────────────────────────────────────
 
 /**
+ * Consecutive-beat budget before a persistently unparsable outbox file is
+ * quarantined. Router ticks every 1500ms: 3 beats ≈ 4.5s, far beyond any
+ * atomic-write window, while a genuinely corrupt file still quarantines fast.
+ */
+const ROUTER_PARSE_MAX_TRIES = 3;
+
+/**
  * Repair only literal CR/LF characters that occur inside JSON strings.
  *
  * Agents normally publish outbox messages through JSON.stringify, but a manual
@@ -361,6 +368,10 @@ export class HiveManager {
   ) {}
 
   private routerTimer: NodeJS.Timeout | null = null;
+  // TOCTOU guard: outbox files may be read mid-write (non-atomic external
+  // writers). A parse failure is retried on later beats; only a file that
+  // stays unparsable for ROUTER_PARSE_MAX_TRIES beats is quarantined.
+  private routerParseTries = new Map<string, number>();
 
   /** The embedded OTLP collector's loopback URL, set by the main process once the
    *  collector is bound (telemetry.ts). null = telemetry off → no OTel env is
@@ -1718,25 +1729,32 @@ export class HiveManager {
       for (const f of readdirSync(outbox)) {
         if (!f.endsWith('.json')) continue;
         const full = join(outbox, f);
+        const parseKey = `${id}/${f}`;
         try {
           const raw = readFileSync(full, 'utf8');
-          let partial: Partial<HiveMessage>;
+          let partial: Partial<HiveMessage> | undefined;
           try {
             partial = JSON.parse(raw) as Partial<HiveMessage>;
           } catch {
             const repaired = repairLiteralLineBreaksInJsonStrings(raw);
-            if (!repaired.changed) {
-              this.appendLog({ kind: 'drop', reason: 'malformed-json', from: id, file: f });
+            if (repaired.changed) {
+              try {
+                partial = JSON.parse(repaired.text) as Partial<HiveMessage>;
+              } catch { /* fall through to retry accounting below */ }
+            }
+            if (!partial) {
+              // Possibly a mid-write read: defer, do NOT quarantine yet. A
+              // non-atomic external writer can be caught with a truncated file;
+              // the next beat sees the finished bytes and routes normally.
+              const tries = (this.routerParseTries.get(parseKey) ?? 0) + 1;
+              this.routerParseTries.set(parseKey, tries);
+              if (tries < ROUTER_PARSE_MAX_TRIES) continue;
+              this.routerParseTries.delete(parseKey);
+              this.appendLog({ kind: 'drop', reason: 'malformed-json', from: id, file: f, tries });
               try { renameSync(full, join(outbox, '.sent', `bad-${f}`)); } catch { /* noop */ }
               continue;
             }
-            try {
-              partial = JSON.parse(repaired.text) as Partial<HiveMessage>;
-            } catch {
-              this.appendLog({ kind: 'drop', reason: 'malformed-json', from: id, file: f });
-              try { renameSync(full, join(outbox, '.sent', `bad-${f}`)); } catch { /* noop */ }
-              continue;
-            }
+            this.routerParseTries.delete(parseKey);
             this.appendLog({
               kind: 'outbox-repair',
               from: id,
@@ -1748,9 +1766,15 @@ export class HiveManager {
           msg.from = id; // sender is authoritative — the owning directory
           this.routeMessage(msg);
           renameSync(full, join(outbox, '.sent', f)); // archive, don't reprocess
+          this.routerParseTries.delete(parseKey);
           routed++;
         } catch {
-          // malformed file — quarantine so we don't spin on it
+          // IO/rename failure — same defer-then-quarantine policy so a
+          // transient lock/partial write cannot strand a valid message.
+          const tries = (this.routerParseTries.get(parseKey) ?? 0) + 1;
+          this.routerParseTries.set(parseKey, tries);
+          if (tries < ROUTER_PARSE_MAX_TRIES) continue;
+          this.routerParseTries.delete(parseKey);
           try { renameSync(full, join(outbox, '.sent', `bad-${f}`)); } catch { /* noop */ }
         }
       }
