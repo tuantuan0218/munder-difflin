@@ -359,6 +359,13 @@ the product rather than the codebase. Also see [`HIVE.md`](./HIVE.md) for the mu
 [`SPEC.md`](./SPEC.md) for the terminal and event plane, and [`DESIGN.md`](./DESIGN.md) for the
 visual system.
 
+> **Deployment operations for the deck (e.g. the Hearthstone practice loop) are tracked outside this repo's tree:**
+> authoritative status = [`hive/STATUS.md`](./hive/STATUS.md) (release/acceptance ledger, Pam-maintained on god notifications),
+> shared plan = [`hive/board.md`](./hive/board.md) (god-scribe), and dated handovers under `D:\tdsh\炉石传说\HANDOVER-2026*.md`
+> (latest: `HANDOVER-20260912-2345-pam-t141状态同步.md`). Notable gate knobs there include the governor `BnetLaunchThrottle`
+> (Battle.net relaunch spacing ≥60s, t-138) and the rotator `ROW_CAP=4` practice-opponent limit (t-139 open).
+> This README intentionally stays general so product docs and per-deployment ops docs evolve independently.
+
 <div align="right">(<a href="#munder-difflin">↑ back to top</a>)</div>
 
 ## Roadmap

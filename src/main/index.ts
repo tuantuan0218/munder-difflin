@@ -341,7 +341,7 @@ const reflectModel = (): string => {
   if (explicit) return explicit;
   // pi has no 'claude-haiku-4-5' in its catalog; use the fleet's own cheap model.
   return reflectProvider() === 'pi'
-    ? ((c.defaultModel as string | undefined) ?? 'yunshu/deepseek-v4-flash')
+    ? ((c.defaultModel as string | undefined) ?? 'tuan/Tuan')
     : 'claude-haiku-4-5';
 };
 const reflector = new MemoryReflector(
