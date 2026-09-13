@@ -177,3 +177,11 @@ Move-Item D:\MunderDifflin\_clean-quarantine-20260906\* D:\MunderDifflin\hive\ag
 
 ### 7.5 待其他 agent 处理（已交接）
 - **cf-sub-api EPIPE 瀑布**（8790 tuan 代理）：根因=宿主进程（PPID 19228）已退出→孤儿 node stdout 管道断→llm.js 裸 console.error 触发 EPIPE→被 index.js 守卫记为 crash.log stdout-lost。服务本体健康（/v1/models 200）。**交接文档=`D:\tdsh\hs_bridge_build\交接-cf-sub-api-EPIPE-20260913.md`**（含三级修复方案 A/B/C、验证清单、边界约束：勿杀 PID 18108、勿动 1M 配置）。当前角色为资料整理，不代修代码，等待用户指派 agent 接手。
+
+### 7.6 状态不配套修复（09-13 08:5x-09:0x，DSH 侧执行）
+> 现象：用户报「蜂群空闲跟工作状态不配套」——UI 显示全部 idle，实际 worker 在干活（会话在写、工具在跑）。
+> **根因链**：pi 0.74.2 的扩展自动发现（agentDir/extensions/*.ts）**没加载 hive-bridge.js** → HIVE_SOCK 无事件回流 → fleet.lastTool/lastActiveSecAgo 全 null → UI 判 idle。
+> **修复**：7 个 agent 的 `.pi-agent/settings.json` 加 `"extensions": ["D:/MunderDifflin/hive/agents/<id>/.pi-agent/extensions/hive-bridge.js"]`（pi 文档 settings.extensions 显式声明通道，最可靠）。重启后 kevin 崩溃日志出现 `[Extensions] hive-bridge.js` = 加载成功铁证；UI DOM 出现「god/ryan/stanley 工作中·using 工具」= 事件回流生效。
+> **副作用与处置**：08:10 重启时 archiveOrphanedAgents 把 6 worker 全归档（重启瞬间无 PTY）且 UI 卡 HivePicker（localStorage 无 cth.skipHivePickerOnce）→ 主界面不渲染 → 恢复团队不触发。解法：CDP（--remote-debugging-port=9223 重启）注入 `localStorage.setItem('cth.skipHivePickerOnce','1')` + Page.reload → hiveOpened=true → auto-restore 拉起。**注意**：HivePicker 只在「switch hive 后 relaunch」自动跳过；普通重启会卡 picker 等用户点 open——无人值守时用 CDP 注入标志。
+> **探针教训**：往 HIVE_SOCK 投 PostToolUse 会把 agent.sessionId 写成伪造值 → 下次 restore 时 pi 报 `No session found` 崩溃（creed 中招）。**勿用探针改真实 agent 的 sessionId**；已清。
+> **验收**：7 pi 进程全活、fleet 7 agent、UI 工作中/空闲与实况配套；主进程 handle() 消费 hook 事件验证通过（真实 sessionId 探针写入 registry 成功）。
