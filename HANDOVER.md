@@ -185,3 +185,14 @@ Move-Item D:\MunderDifflin\_clean-quarantine-20260906\* D:\MunderDifflin\hive\ag
 > **副作用与处置**：08:10 重启时 archiveOrphanedAgents 把 6 worker 全归档（重启瞬间无 PTY）且 UI 卡 HivePicker（localStorage 无 cth.skipHivePickerOnce）→ 主界面不渲染 → 恢复团队不触发。解法：CDP（--remote-debugging-port=9223 重启）注入 `localStorage.setItem('cth.skipHivePickerOnce','1')` + Page.reload → hiveOpened=true → auto-restore 拉起。**注意**：HivePicker 只在「switch hive 后 relaunch」自动跳过；普通重启会卡 picker 等用户点 open——无人值守时用 CDP 注入标志。
 > **探针教训**：往 HIVE_SOCK 投 PostToolUse 会把 agent.sessionId 写成伪造值 → 下次 restore 时 pi 报 `No session found` 崩溃（creed 中招）。**勿用探针改真实 agent 的 sessionId**；已清。
 > **验收**：7 pi 进程全活、fleet 7 agent、UI 工作中/空闲与实况配套；主进程 handle() 消费 hook 事件验证通过（真实 sessionId 探针写入 registry 成功）。
+
+### 7.7 本会话成果闭环（09-13 09:3x 追加，只增不覆写）
+> 承接 §7.6。以下事项均已闭环/落地，供跨会话参考。
+
+- **蜂群状态修复已验证稳定**（40+ 分钟后复检）：7 worker 全活、UI 状态动态配套（采样显示 GOD/瑞安/德怀特工作中，与前次 GOD/瑞安/斯坦利不同=实时更新非假象）；settings.json extensions 声明 7/7 在位；HIVE_SOCK 主进程消费验证通过（真实 sessionId 探针写入 registry 成功）。
+- **炉石 gov m2v172（ROW_CAP=10 解禁）已换栈在役**（09:19:45Z god 亲执，java 09:19:46 重启）：DSH 第三源三查 PASS（md5 三源 1374000e 一致、rotator 锚 ROW_CAP=10/TRIAL_ROW_MIN=5/TRIAL_BAD_MAX=3、TRIAL_CAP_OBSERVED 纯观测默认关、rotator.class 26765B、零跨界引用）；plugin 终态 m2v172.jar 106841B + df m2v194.jar 87269B 零动；Stanley 抓证基线全绿（无 REJECT/BAD/TRIAL-CAP）。段 0/11 破冰信号监视开启。
+- **m2v194 验收窗续跑**（326 回合）：中位 24.1s（锚≤25✅）、F1/L975/D1/③ 全达标、④币跳费缺陷持续（点币 24 全未落地=0，根因=waitLanded 800/1000ms 压窗 vs SDK 手牌刷新延迟 1.7s，08:53 实锤）；max 1305s=换栈停机窗归因非缺陷；报告已投 god（2f8be1）。
+- **cf-sub-api EPIPE 已由接手 agent 修复**：llm.js 已实施 safeLog/safeErr/safeWarn（方案 B 落地，24-26 行+353 行已用）；crash.log 1212B 不再增长（最后 EPIPE 07:08 后归零）；8790 代理健康（HTTP 200），已重启为新实例。
+- **1M 上下文全链稳定**：全局+7 agent 镜像+cf-sub-api 两份模板全部 1000000（check-pi-ctx.cjs 验证 ALL 1M）。
+- **交接文档**：cf-sub-api EPIPE=`D:\tdsh\hs_bridge_build\交接-cf-sub-api-EPIPE-20260913.md`。
+- **待续**：m2v194 ④币跳费待 Ryan 下迭代修复（宽窗口销账/放宽 waitLanded/trust issued）；t-146 收栈判定由 god 裁；m2v172 换栈后 11 职业轮转验收锚监控（BAD 行跳过不卡死、无 REJECT 误判、局间不卡）。
